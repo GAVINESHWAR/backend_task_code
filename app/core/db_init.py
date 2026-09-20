@@ -16,6 +16,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from app.core.config import get_settings, normalize_psycopg_url
+
 log = logging.getLogger(__name__)
 
 
@@ -33,18 +35,20 @@ def list_sql_files() -> list[Path]:
 
 def run_sql_files(database_url: str | None = None) -> list[str]:
     """Execute all db/*.sql files. Returns list of executed filenames."""
-    from app.core.config import get_settings
-
     settings = get_settings()
     if not settings.AUTO_RUN_SQL:
         log.info("AUTO_RUN_SQL=false, skipping SQL auto-run.")
         return []
-    url = database_url or settings.SYNC_DATABASE_URL
+    url = normalize_psycopg_url(database_url) if database_url else settings.psycopg_url
     files = list_sql_files()
     if not files:
         log.warning("No db/*.sql files found, nothing to run.")
         return []
-    import psycopg
+    try:
+        import psycopg
+    except ImportError:
+        log.warning("psycopg not installed, skipping SQL auto-run.")
+        return []
 
     executed: list[str] = []
     # psycopg3 autocommit is required for CREATE INDEX CONCURRENTLY etc.
@@ -54,7 +58,14 @@ def run_sql_files(database_url: str | None = None) -> list[str]:
             if not sql.strip():
                 continue
             log.info("Applying SQL script: %s", f.name)
-            with conn.cursor() as cur:
-                cur.execute(sql)
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(sql)
+            except Exception as exc:
+                # Managed Postgres (Render/RDS/...) may reject e.g.
+                # CREATE EXTENSION without superuser. Log and continue so
+                # one script never kills the whole deploy boot.
+                log.warning("SQL script %s failed, continuing: %s", f.name, exc)
+                continue
             executed.append(f.name)
     return executed
