@@ -7,7 +7,8 @@ BEGIN
   SELECT id INTO demo_id FROM users WHERE email = 'demo@local.test';
   IF demo_id IS NULL THEN
     INSERT INTO users (email, password_hash, full_name)
-    VALUES ('demo@local.test', '$2b$12$KIX9l5YV5QZ6QZ6QZ6QZuOQZ6QZ6QZ6QZ6QZ6QZ6QZ6QZ6QZ6QZ6', 'Demo User')
+    -- bcrypt hash of 'password123' (matches the prefilled demo login).
+    VALUES ('demo@local.test', '$2b$12$wX.wJeWOlOTkfFvFir6Xmu4ko8E8s2Z25oBdqLEawwj/EHCo7iXdm', 'Demo User')
     RETURNING id INTO demo_id;
 
     INSERT INTO projects (user_id, name, description, category, status, priority)
